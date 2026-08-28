@@ -1,0 +1,10 @@
+{
+  "model": "gpt-4o-mini",
+  "messages": [
+    { "role": "system", "content": "You are a helpful assistant." },
+    { "role": "user", "content": "Hello" }
+  ],
+  "temperature": 0.2,
+  "max_tokens": 128,
+  "logit_bias": { "123": -1 }
+}
