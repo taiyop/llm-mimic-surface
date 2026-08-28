@@ -34,6 +34,7 @@
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
     "check": "npm run lint && npm run typecheck && npm test && npm run build",
+    "prepare": "npm run build",
     "prepack": "npm run build"
   },
   "engines": {
