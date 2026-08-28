@@ -1,37 +1,36 @@
-import { randomUUID } from "node:crypto";
-import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
-import { authenticate } from "../../auth/bearer.js";
-import type { AuthConfig } from "../../auth/types.js";
+import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 import type { ExternalApiBackend } from "../../backend/types.js";
 import { BackendError, toBackendError, type EncodedError } from "../../boundary/errors.js";
 import type { LossyConversionPolicy } from "../../boundary/request.js";
-import { runHook, type ServerHooks } from "../../hooks.js";
+import { runHook, type HttpTransportHooks } from "../../hooks.js";
 import { ProtocolRegistry, RouteCollisionError } from "../../protocol/registry.js";
 import type { ProtocolAdapter, ProtocolReply, ProtocolRequest, RouteSpec } from "../../protocol/types.js";
-import { applyCors, isPreflight, type CorsConfig } from "./cors.js";
 import { createSseWriter } from "./sse.js";
 
-export interface CreateServerOptions {
+export interface LLMMimicSurfacePluginOptions {
   backend: ExternalApiBackend;
   protocols: ProtocolAdapter[];
-  auth?: AuthConfig;
-  cors?: CorsConfig;
-  bodyLimit?: number;
-  requestTimeoutMs?: number;
-  host?: string;
-  logger?: boolean;
-  hooks?: ServerHooks;
+  hooks?: HttpTransportHooks;
   lossyConversion?: LossyConversionPolicy;
 }
 
-export interface ExternalApiServer {
-  readonly fastify: FastifyInstance;
-  listen(options?: { host?: string; port?: number }): Promise<{ host: string; port: number }>;
-  close(): Promise<void>;
-  inject: FastifyInstance["inject"];
-}
+/**
+ * Registers the external LLM API surface on a Fastify host.
+ *
+ * The host owns server creation, listen/close, authentication, middleware,
+ * logging, TLS, limits, timeouts, and application lifecycle.
+ */
+export const llmMimicSurfacePlugin: FastifyPluginAsync<LLMMimicSurfacePluginOptions> = async (
+  fastify,
+  options
+) => {
+  const registry = createRegistry(options);
+  for (const spec of registry.list()) {
+    bindRoute(fastify, spec, options);
+  }
+};
 
-export function createExternalApiServer(options: CreateServerOptions): ExternalApiServer {
+function createRegistry(options: LLMMimicSurfacePluginOptions): ProtocolRegistry {
   const registry = new ProtocolRegistry();
   for (const protocol of options.protocols) {
     registry.registerAdapter(protocol);
@@ -42,67 +41,23 @@ export function createExternalApiServer(options: CreateServerOptions): ExternalA
         }
       },
       options.backend,
-      { lossyConversion: options.lossyConversion }
+      { lossyConversion: options.lossyConversion, hooks: options.hooks }
     );
   }
-
-  const fastify = Fastify({
-    logger: options.logger ?? false,
-    bodyLimit: options.bodyLimit ?? 1_048_576,
-    requestTimeout: options.requestTimeoutMs ?? 120_000,
-    trustProxy: false
-  });
-
-  fastify.addHook("onRequest", async (request, reply) => {
-    const requestId = headerString(request.headers["x-request-id"]) ?? randomUUID();
-    request.id = requestId;
-    reply.header("x-request-id", requestId);
-    applyCors(request, reply, options.cors ?? true);
-    if (isPreflight(request)) {
-      reply.status(204);
-      return reply.send();
-    }
-  });
-
-  fastify.get("/health", async () => ({ ok: true }));
-
-  for (const spec of registry.list()) {
-    bindRoute(fastify, spec, options);
-  }
-
-  const defaultHost = options.host ?? "127.0.0.1";
-
-  return {
-    fastify,
-    inject: fastify.inject.bind(fastify),
-    async listen(listenOptions) {
-      const host = listenOptions?.host ?? defaultHost;
-      if (host === "0.0.0.0" && listenOptions?.host === undefined && options.host === undefined) {
-        throw new Error("Refusing to bind 0.0.0.0 without an explicit host option");
-      }
-      const address = await fastify.listen({
-        host,
-        port: listenOptions?.port ?? 0
-      });
-      const url = new URL(address);
-      return { host: url.hostname, port: Number(url.port) };
-    },
-    async close() {
-      await fastify.close();
-    }
-  };
+  return registry;
 }
 
-function bindRoute(fastify: FastifyInstance, spec: RouteSpec, options: CreateServerOptions): void {
+function bindRoute(
+  fastify: FastifyInstance,
+  spec: RouteSpec,
+  options: LLMMimicSurfacePluginOptions
+): void {
   fastify.route({
     method: spec.method,
     url: spec.path,
     handler: async (request, reply) => {
       const started = Date.now();
       const abort = new AbortController();
-      const timeoutMs = options.requestTimeoutMs ?? 120_000;
-      const timeout = AbortSignal.timeout(timeoutMs);
-      const signal = AbortSignal.any([abort.signal, timeout]);
       const onClientGone = () => {
         if (!abort.signal.aborted && !reply.raw.writableEnded) {
           abort.abort();
@@ -117,20 +72,14 @@ function bindRoute(fastify: FastifyInstance, spec: RouteSpec, options: CreateSer
       }, 25);
       disconnectPoll.unref();
 
-      const protocolRequest = toProtocolRequest(request, signal);
-      await runHook(options.hooks?.onRequest, {
-        requestId: protocolRequest.requestId,
-        protocol: spec.protocolId,
-        method: spec.method,
-        path: spec.path,
-        remoteAddress: protocolRequest.remoteAddress
-      });
-
+      const protocolRequest = toProtocolRequest(request, abort.signal);
       try {
-        await authenticate(options.auth ?? false, {
-          headers: protocolRequest.headers,
+        await runHook(options.hooks?.onRequest, {
+          requestId: protocolRequest.requestId,
+          protocol: spec.protocolId,
+          method: spec.method,
           path: spec.path,
-          protocol: spec.protocolId
+          remoteAddress: protocolRequest.remoteAddress
         });
         const protocolReply = toProtocolReply(reply);
         await spec.handler(protocolRequest, protocolReply);
@@ -142,7 +91,9 @@ function bindRoute(fastify: FastifyInstance, spec: RouteSpec, options: CreateSer
           remoteAddress: protocolRequest.remoteAddress,
           statusCode: reply.statusCode,
           durationMs: Date.now() - started,
-          streamed: Boolean(reply.raw.headersSent && String(reply.raw.getHeader("content-type") ?? "").includes("event-stream"))
+          streamed: Boolean(
+            reply.raw.headersSent && String(reply.raw.getHeader("content-type") ?? "").includes("event-stream")
+          )
         });
       } catch (error) {
         const backendError = toBackendError(error);
@@ -218,13 +169,6 @@ function sendEncodedError(reply: FastifyReply, encoded: EncodedError): void {
     reply.header(name, value);
   }
   reply.status(encoded.status).send(encoded.body);
-}
-
-function headerString(value: string | string[] | undefined): string | undefined {
-  if (Array.isArray(value)) {
-    return value[0];
-  }
-  return value;
 }
 
 export { RouteCollisionError, BackendError };

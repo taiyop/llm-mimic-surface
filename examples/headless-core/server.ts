@@ -1,4 +1,5 @@
-import { anthropicProtocol, createExternalApiServer, openAIProtocol } from "../../src/index.js";
+import Fastify from "fastify";
+import { anthropicProtocol, llmMimicSurfacePlugin, openAIProtocol } from "../../src/index.js";
 import { HeadlessCoreBackend, type HeadlessCoreLike } from "./backend.js";
 
 async function loadHeadlessCore(): Promise<HeadlessCoreLike> {
@@ -19,12 +20,12 @@ const backend = new HeadlessCoreBackend({
   }
 });
 
-const server = createExternalApiServer({
+const server = Fastify();
+await server.register(llmMimicSurfacePlugin, {
   backend,
-  protocols: [openAIProtocol(), anthropicProtocol()],
-  auth: false
+  protocols: [openAIProtocol(), anthropicProtocol()]
 });
 
-const { host, port } = await server.listen({ host: "127.0.0.1", port: 8080 });
-console.log(`headless_core backend at http://${host}:${port}`);
+await server.listen({ host: "127.0.0.1", port: 8080 });
+console.log("headless_core backend at http://127.0.0.1:8080");
 console.log("Try model ids such as codex/default, claude/sonnet, grok/default");

@@ -1,27 +1,31 @@
+import Fastify, { type FastifyInstance } from "fastify";
 import {
   createEchoBackend,
-  createExternalApiServer,
-  type CreateServerOptions,
   type ExternalApiBackend,
-  type ExternalApiServer,
+  type LLMMimicSurfacePluginOptions,
+  llmMimicSurfacePlugin,
   type ProtocolAdapter
 } from "../../src/index.js";
 
+type TestServerOptions = Omit<Partial<LLMMimicSurfacePluginOptions>, "protocols"> & {
+  backend?: ExternalApiBackend;
+  configureHost?: (app: FastifyInstance) => void | Promise<void>;
+};
+
 export async function withInjectedServer(
   protocols: ProtocolAdapter[],
-  fn: (server: ExternalApiServer) => Promise<void>,
-  options?: Partial<CreateServerOptions> & { backend?: ExternalApiBackend }
+  fn: (server: FastifyInstance) => Promise<void>,
+  options?: TestServerOptions
 ): Promise<void> {
-  const server = createExternalApiServer({
+  const server = Fastify({ forceCloseConnections: true });
+  await options?.configureHost?.(server);
+  await server.register(llmMimicSurfacePlugin, {
     backend: options?.backend ?? createEchoBackend(),
     protocols,
-    auth: options?.auth ?? false,
-    cors: options?.cors ?? true,
     hooks: options?.hooks,
-    lossyConversion: options?.lossyConversion,
-    requestTimeoutMs: options?.requestTimeoutMs,
-    bodyLimit: options?.bodyLimit
+    lossyConversion: options?.lossyConversion
   });
+  await server.ready();
   try {
     await fn(server);
   } finally {
@@ -31,20 +35,18 @@ export async function withInjectedServer(
 
 export async function withListeningServer(
   protocols: ProtocolAdapter[],
-  fn: (baseUrl: string, server: ExternalApiServer) => Promise<void>,
-  options?: Partial<CreateServerOptions> & { backend?: ExternalApiBackend }
+  fn: (baseUrl: string, server: FastifyInstance) => Promise<void>,
+  options?: TestServerOptions
 ): Promise<void> {
-  const server = createExternalApiServer({
+  const server = Fastify({ forceCloseConnections: true });
+  await options?.configureHost?.(server);
+  await server.register(llmMimicSurfacePlugin, {
     backend: options?.backend ?? createEchoBackend(),
     protocols,
-    auth: options?.auth ?? false,
-    cors: options?.cors ?? true,
     hooks: options?.hooks,
-    lossyConversion: options?.lossyConversion,
-    requestTimeoutMs: options?.requestTimeoutMs
+    lossyConversion: options?.lossyConversion
   });
-  const address = await server.listen({ host: "127.0.0.1", port: 0 });
-  const baseUrl = `http://127.0.0.1:${address.port}`;
+  const baseUrl = await server.listen({ host: "127.0.0.1", port: 0 });
   try {
     await fn(baseUrl, server);
   } finally {

@@ -23,12 +23,15 @@ export interface StreamEventHookInfo extends RequestHookInfo {
   eventType: InvocationEvent["type"];
 }
 
-export interface ServerHooks {
+export interface HttpTransportHooks {
   onRequest?: (info: RequestHookInfo) => void | Promise<void>;
   onResponse?: (info: ResponseHookInfo) => void | Promise<void>;
   onError?: (info: ErrorHookInfo) => void | Promise<void>;
   onStreamEvent?: (info: StreamEventHookInfo) => void | Promise<void>;
 }
+
+/** @deprecated Use HttpTransportHooks. */
+export type ServerHooks = HttpTransportHooks;
 
 export async function runHook<T>(hook: ((value: T) => void | Promise<void>) | undefined, value: T): Promise<void> {
   if (!hook) {

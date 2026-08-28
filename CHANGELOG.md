@@ -16,7 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Gemini-compatible subset: `POST /v1beta/models/:model:generateContent` and `:streamGenerateContent`
 - xAI / Grok protocol dialect sharing the OpenAI-compatible codec
 - Custom protocol API (`createProtocolAdapter`, `createSimpleProtocol`)
-- HTTP transport with request IDs, AbortSignal, timeout, CORS, body limit, SSE keep-alive, and graceful shutdown
+- Fastify route plugin with HTTP/SSE serialization and client-disconnect `AbortSignal`
+- Optional `llm-mimic-surface/standalone` convenience entry point
+- Host-owned server lifecycle, bind/TLS, authentication, middleware, logging, limits, and timeouts
 - Mock / echo backend
 - CLI: `llm-mimic-surface serve`
 - Example backend for `headless_core`

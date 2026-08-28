@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import Fastify from "fastify";
 import { createEchoBackend } from "../backend/mock.js";
 import { anthropicProtocol } from "../protocol/anthropic/index.js";
 import { geminiProtocol } from "../protocol/gemini/index.js";
@@ -6,7 +7,7 @@ import { openAIProtocol } from "../protocol/openai/index.js";
 import type { ProtocolAdapter } from "../protocol/types.js";
 import { xaiProtocol } from "../protocol/xai/index.js";
 import { createSimpleProtocol } from "../protocol/simple.js";
-import { createExternalApiServer } from "../transport/http/server.js";
+import { llmMimicSurfacePlugin } from "../transport/http/plugin.js";
 
 type CliOptions = {
   command: string;
@@ -87,21 +88,24 @@ If both openai and xai are enabled, CLI prefixes them as /openai and /xai to avo
   const collide = names.includes("openai") && (names.includes("xai") || names.includes("grok"));
   const protocols = names.map((name) => createProtocol(name, collide));
   const backend = createEchoBackend();
-  const server = createExternalApiServer({
-    backend,
-    protocols,
-    auth: options.auth
-      ? {
-          type: "bearer",
-          validate: async (token) => token.length > 0
-        }
-      : false,
-    cors: true
-  });
+  const server = Fastify();
+  if (options.auth) {
+    server.addHook("onRequest", async (request, reply) => {
+      const authorization = request.headers.authorization;
+      const token = authorization?.startsWith("Bearer ") ? authorization.slice(7).trim() : "";
+      if (!token) {
+        await reply.status(401).send({
+          error: { type: "authentication_error", message: "Missing or invalid bearer token" }
+        });
+      }
+    });
+  }
+  await server.register(llmMimicSurfacePlugin, { backend, protocols });
 
   const address = await server.listen({ host: options.host, port: options.port });
+  const url = new URL(address);
   process.stdout.write(
-    `llm-mimic-surface listening on http://${address.host}:${address.port}\n` +
+    `llm-mimic-surface listening on http://${url.hostname}:${url.port}\n` +
       `protocols: ${names.join(", ")}${collide ? " (openai -> /openai, xai -> /xai)" : ""}\n` +
       `backend: echo mock\n`
   );

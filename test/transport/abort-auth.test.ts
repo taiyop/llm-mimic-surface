@@ -3,6 +3,58 @@ import { MockBackend, openAIProtocol } from "../../src/index.js";
 import { withInjectedServer, withListeningServer } from "../helpers/server.js";
 
 describe("transport", () => {
+  it("coexists with application routes on the host server", async () => {
+    await withInjectedServer(
+      [openAIProtocol()],
+      async (server) => {
+        const status = await server.inject({ method: "GET", url: "/api/status" });
+        expect(status.statusCode).toBe(200);
+        expect(status.json()).toEqual({ ok: true });
+
+        const completion = await server.inject({
+          method: "POST",
+          url: "/v1/chat/completions",
+          payload: { model: "echo", messages: [{ role: "user", content: "hi" }] }
+        });
+        expect(completion.statusCode).toBe(200);
+      },
+      {
+        configureHost(app) {
+          app.get("/api/status", async () => ({ ok: true }));
+        }
+      }
+    );
+  });
+
+  it("reports backend stream events through transport hooks", async () => {
+    const eventTypes: string[] = [];
+    await withListeningServer(
+      [openAIProtocol()],
+      async (baseUrl) => {
+        const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            model: "echo",
+            messages: [{ role: "user", content: "hi" }],
+            stream: true
+          })
+        });
+        expect(response.status).toBe(200);
+        await response.text();
+      },
+      {
+        hooks: {
+          onStreamEvent(info) {
+            eventTypes.push(info.eventType);
+          }
+        }
+      }
+    );
+    expect(eventTypes).toContain("text.delta");
+    expect(eventTypes).toContain("response.end");
+  });
+
   it("aborts the backend when the client disconnects", async () => {
     let aborted = false;
     const backend = new MockBackend({
@@ -51,7 +103,7 @@ describe("transport", () => {
     }, { backend });
   });
 
-  it("rejects missing bearer tokens when auth is enabled", async () => {
+  it("lets the host reject missing bearer tokens before surface routes", async () => {
     await withInjectedServer(
       [openAIProtocol()],
       async (server) => {
@@ -63,15 +115,18 @@ describe("transport", () => {
         expect(response.statusCode).toBe(401);
       },
       {
-        auth: {
-          type: "bearer",
-          validate: async (token) => token === "secret"
+        configureHost(app) {
+          app.addHook("onRequest", async (request, reply) => {
+            if (request.headers.authorization !== "Bearer secret") {
+              await reply.status(401).send({ error: "unauthorized" });
+            }
+          });
         }
       }
     );
   });
 
-  it("accepts a valid bearer token", async () => {
+  it("runs surface routes after host authentication succeeds", async () => {
     await withInjectedServer(
       [openAIProtocol()],
       async (server) => {
@@ -84,9 +139,12 @@ describe("transport", () => {
         expect(response.statusCode).toBe(200);
       },
       {
-        auth: {
-          type: "bearer",
-          validate: async (token) => token === "secret"
+        configureHost(app) {
+          app.addHook("onRequest", async (request, reply) => {
+            if (request.headers.authorization !== "Bearer secret") {
+              await reply.status(401).send({ error: "unauthorized" });
+            }
+          });
         }
       }
     );

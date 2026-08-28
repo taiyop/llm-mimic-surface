@@ -5,7 +5,7 @@ Bring your own backend. Expose it through familiar AI APIs.
 This package is an **External API Interface layer**, not an LLM proxy and not an LLM core. It accepts requests from OpenAI / Anthropic / Gemini / xAI clients, converts them to a small boundary contract, and forwards them to a backend you supply.
 
 ```text
-Client  →  Protocol Adapter  →  Boundary Contract  →  Backend SPI  →  Your core
+Client → Your HTTP Server → LLMMimicSurface Plugin → Backend SPI → Your core
 ```
 
 ## Why
@@ -38,7 +38,8 @@ These are **compatible subsets**, not complete vendor clones. See [docs/compatib
 
 ```mermaid
 flowchart TD
-    Client[Client] --> Protocol[Protocol Adapter]
+    Client[Client] --> Host[Application HTTP Server]
+    Host --> Protocol[LLMMimicSurface HTTP/Protocol Plugin]
     Protocol --> Boundary[Boundary Contract]
     Boundary --> Backend[Backend SPI]
     Backend --> Runtime[Your runtime]
@@ -76,20 +77,23 @@ npm install llm-mimic-surface
 
 ```ts
 import {
-  createExternalApiServer,
+  llmMimicSurfacePlugin,
   createEchoBackend,
   openAIProtocol,
   anthropicProtocol,
   geminiProtocol
 } from "llm-mimic-surface";
+import Fastify from "fastify";
 
-const server = createExternalApiServer({
+const app = Fastify({ logger: true });
+
+// The host application owns auth, middleware, logging, limits, and lifecycle.
+await app.register(llmMimicSurfacePlugin, {
   backend: createEchoBackend(),
-  protocols: [openAIProtocol(), anthropicProtocol(), geminiProtocol()],
-  auth: false
+  protocols: [openAIProtocol(), anthropicProtocol(), geminiProtocol()]
 });
 
-await server.listen({ host: "127.0.0.1", port: 8080 });
+await app.listen({ host: "127.0.0.1", port: 8080 });
 ```
 
 ```ts
@@ -113,6 +117,20 @@ npx llm-mimic-surface serve --protocol openai --port 8080
 ```
 
 The process binds to `127.0.0.1` by default.
+
+For local verification there is also a convenience entry point:
+
+```ts
+import { createStandaloneServer } from "llm-mimic-surface/standalone";
+
+const app = await createStandaloneServer({
+  backend,
+  protocols: [openAIProtocol()]
+});
+await app.listen({ host: "127.0.0.1", port: 8080 });
+```
+
+This subpath is not the primary integration API. Applications such as Agent2API should create one HTTP server and register `llmMimicSurfacePlugin` on it.
 
 ## OpenAI compatible API
 
@@ -149,9 +167,9 @@ Converted fields: `contents`, `parts`, `systemInstruction`, `generationConfig`, 
 ## xAI / Grok compatible API
 
 ```ts
-import { createExternalApiServer, xaiProtocol } from "llm-mimic-surface";
+import { llmMimicSurfacePlugin, xaiProtocol } from "llm-mimic-surface";
 
-const server = createExternalApiServer({
+await app.register(llmMimicSurfacePlugin, {
   backend,
   protocols: [xaiProtocol({ prefix: "/xai" })]
 });
@@ -169,9 +187,9 @@ xAI-only fields such as `search_parameters` and server-side tools (`web_search`,
 ## Custom protocol
 
 ```ts
-import { createExternalApiServer, createEchoBackend, createSimpleProtocol } from "llm-mimic-surface";
+import { createEchoBackend, createSimpleProtocol, llmMimicSurfacePlugin } from "llm-mimic-surface";
 
-const server = createExternalApiServer({
+await app.register(llmMimicSurfacePlugin, {
   backend: createEchoBackend(),
   protocols: [
     createSimpleProtocol({ path: "/api/generate" })
@@ -244,10 +262,9 @@ Internal errors are normalized to `BackendError` (`invalid_request`, `unsupporte
 
 ## Security
 
-- Default bind address: `127.0.0.1`
-- Optional bearer / custom auth; `auth: false` is allowed for local development
-- API keys and prompt bodies are not logged by default
-- Body size limit, request timeout, CORS, and client-disconnect abort are enabled in the HTTP transport
+- The host application owns bind addresses, TLS, authentication, global middleware, logging, body limits, and request timeouts.
+- LLMMimicSurface serializes protocol responses/errors and turns client disconnects into the backend `AbortSignal`.
+- The standalone CLI binds to `127.0.0.1` by default.
 
 See [SECURITY.md](SECURITY.md).
 

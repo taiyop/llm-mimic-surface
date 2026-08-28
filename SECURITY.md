@@ -8,14 +8,13 @@ Security fixes are accepted for the latest `0.x` release.
 
 Please open a private report on GitHub or email the maintainer. Do not file a public issue for credential leaks or remote-code-execution reports.
 
-## Local server defaults
+## Host application boundary
 
-- The HTTP server binds to `127.0.0.1` unless a host is set explicitly.
-- Binding to `0.0.0.0` is never implied.
-- Request bodies, prompts, file contents, and API keys are not logged by default.
-- Authorization headers are redacted in any hook metadata you choose to log.
-- Local `auth: false` is intended for development only.
+- LLMMimicSurface does not bind a socket or own TLS, authentication, CORS, global middleware, or application logging.
+- The host application must set a safe bind address, authenticate requests, configure limits/timeouts, and avoid logging secrets.
+- Client disconnects abort the signal passed to the backend.
+- The standalone CLI binds to `127.0.0.1` unless the operator explicitly supplies another host.
 
 ## What this project does not do
 
-This package does not store or rotate LLM provider credentials. If you enable bearer auth on the local server, treat those tokens as secrets and never print them.
+This package does not store or rotate LLM provider credentials. Host authentication tokens and provider credentials must be treated as secrets and never printed.

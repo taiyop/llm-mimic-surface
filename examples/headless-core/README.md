@@ -4,7 +4,8 @@ This example is **not** part of the published package. `headless_core` is one po
 
 ```text
 OpenAI SDK
-  → External API Interface
+  → Fastify host
+  → LLMMimicSurface plugin
   → HeadlessCoreBackend
   → @headless-core/core
   → Codex / Claude Code / Grok CLI
@@ -17,6 +18,8 @@ npm install @headless-core/core
 ```
 
 The corresponding Agent CLI must be installed locally.
+
+The example owns Fastify and its `listen()` lifecycle. `HeadlessCoreBackend` is the adapter between the LLMMimicSurface `ExternalApiBackend` contract and `headless_core`; the library itself does not import `headless_core`.
 
 ## Run
 

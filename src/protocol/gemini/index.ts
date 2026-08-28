@@ -12,6 +12,7 @@ import {
   parseGeminiModelAction
 } from "./generate-content.js";
 import { encodeGeminiEvent } from "./stream.js";
+import type { HttpTransportHooks } from "../../hooks.js";
 
 export function geminiProtocol(options?: ProtocolOptions): ProtocolAdapter {
   return withProtocolOptions(
@@ -27,7 +28,7 @@ export function geminiProtocol(options?: ProtocolOptions): ProtocolAdapter {
         path: joinPath(prefix, "/v1beta/models/:modelAction"),
         protocolId: "gemini",
         encodeError: encodeGeminiError,
-        handler: generateHandler(backend, policy)
+        handler: generateHandler(backend, policy, options?.hooks)
       });
     }
     }),
@@ -35,7 +36,11 @@ export function geminiProtocol(options?: ProtocolOptions): ProtocolAdapter {
   );
 }
 
-function generateHandler(backend: ExternalApiBackend, policy: LossyConversionPolicy): ProtocolHandler {
+function generateHandler(
+  backend: ExternalApiBackend,
+  policy: LossyConversionPolicy,
+  hooks?: HttpTransportHooks
+): ProtocolHandler {
   return async (request, reply) => {
     const modelAction = request.params.modelAction ?? "";
     const parsed = parseGeminiModelAction(modelAction);
@@ -62,7 +67,8 @@ function generateHandler(backend: ExternalApiBackend, policy: LossyConversionPol
       encodeEvent: encodeGeminiEvent,
       protocol: "gemini",
       path: request.path,
-      method: request.method
+      method: request.method,
+      hooks
     });
   };
 }

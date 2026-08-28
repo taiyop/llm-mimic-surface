@@ -6,10 +6,12 @@ import type { EncodedStreamEvent, InvocationEvent } from "../boundary/events.js"
 export type { EncodedStreamEvent, InvocationEvent };
 import type { InvocationRequest, LossyConversionPolicy } from "../boundary/request.js";
 import type { InvocationResponse } from "../boundary/response.js";
+import type { HttpTransportHooks } from "../hooks.js";
 
 export interface ProtocolOptions {
   prefix?: string;
   lossyConversion?: LossyConversionPolicy;
+  hooks?: HttpTransportHooks;
 }
 
 export interface ProtocolRequest {

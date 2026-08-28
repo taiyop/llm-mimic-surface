@@ -69,7 +69,8 @@ export function createSimpleProtocol(options: SimpleProtocolOptions = {}): Proto
             },
             protocol: "simple",
             path: request.path,
-            method: request.method
+            method: request.method,
+            hooks: protocolOptions?.hooks ?? options.hooks
           });
         }
       });

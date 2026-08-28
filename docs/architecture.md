@@ -6,8 +6,12 @@
 Client
   │
   ▼
-Transport
-HTTP / SSE
+Application HTTP Server
+Agent2API / another Fastify host
+  │
+  ▼
+LLMMimicSurface Plugin
+HTTP handlers / SSE / protocol routes
   │
   ▼
 Protocol Adapter
@@ -25,7 +29,8 @@ User supplied backend
 
 ```mermaid
 flowchart TD
-    Client[Client SDK / curl] --> Transport[HTTP / SSE transport]
+    Client[Client SDK / curl] --> Host[Application HTTP server]
+    Host --> Transport[LLMMimicSurface HTTP / SSE plugin]
     Transport --> OpenAI[OpenAI adapter]
     Transport --> Anthropic[Anthropic adapter]
     Transport --> Gemini[Gemini adapter]
@@ -46,12 +51,18 @@ flowchart TD
 
 | Layer | Responsibility | Must not do |
 | --- | --- | --- |
-| Transport | HTTP, SSE, CORS, request IDs, AbortSignal, timeouts | Understand provider APIs |
+| HTTP plugin | Routes, request parsing, response/error/SSE serialization, disconnect AbortSignal | Listen on a port, own TLS/auth/global middleware/logging/lifecycle |
 | Protocol adapter | Decode/encode wire format | Call an LLM provider |
 | Boundary | Shared request/response/event contract | Become an LLM core |
 | Backend SPI | Invoke user code | See Fastify or protocol SSE events |
 
 **Protocol Adapter ≠ Provider Adapter.** A protocol adapter exposes an external API shape. A provider adapter would call OpenAI/Anthropic/Gemini/xAI with API keys. Provider adapters are out of scope.
+
+## Host boundary
+
+The primary API is `llmMimicSurfacePlugin`. The host creates Fastify, registers application auth and middleware, registers this plugin, and owns `listen()` and graceful shutdown. `llm-mimic-surface/standalone` is only a convenience layer for local verification.
+
+LLMMimicSurface depends only on the `ExternalApiBackend` contract. Agent2API can implement that contract with an adapter around its own core; LLMMimicSurface does not depend on `headless_core`.
 
 ## Streaming
 

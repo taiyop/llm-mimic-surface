@@ -5,7 +5,7 @@ Bring your own backend. Expose it through familiar AI APIs.
 このパッケージは **External API Interface 層** です。LLM プロキシでも LLM コアでもありません。OpenAI / Anthropic / Gemini / xAI クライアントからのリクエストを小さな Boundary Contract に変換し、利用者が渡した Backend へ転送します。
 
 ```text
-Client  →  Protocol Adapter  →  Boundary Contract  →  Backend SPI  →  任意の Core
+Client → Application HTTP Server → LLMMimicSurface Plugin → Backend SPI → 任意の Core
 ```
 
 ## なぜ必要か
@@ -38,7 +38,8 @@ xAI API shares significant compatibility with the OpenAI API, but is implemented
 
 ```mermaid
 flowchart TD
-    Client[Client] --> Protocol[Protocol Adapter]
+    Client[Client] --> Host[Application HTTP Server]
+    Host --> Protocol[LLMMimicSurface HTTP/Protocol Plugin]
     Protocol --> Boundary[Boundary Contract]
     Boundary --> Backend[Backend SPI]
     Backend --> Runtime[Your runtime]
@@ -50,20 +51,22 @@ flowchart TD
 
 ```ts
 import {
-  createExternalApiServer,
+  llmMimicSurfacePlugin,
   createEchoBackend,
   openAIProtocol,
   anthropicProtocol,
   geminiProtocol
 } from "llm-mimic-surface";
+import Fastify from "fastify";
 
-const server = createExternalApiServer({
+const app = Fastify({ logger: true });
+
+await app.register(llmMimicSurfacePlugin, {
   backend: createEchoBackend(),
-  protocols: [openAIProtocol(), anthropicProtocol(), geminiProtocol()],
-  auth: false
+  protocols: [openAIProtocol(), anthropicProtocol(), geminiProtocol()]
 });
 
-await server.listen({ host: "127.0.0.1", port: 8080 });
+await app.listen({ host: "127.0.0.1", port: 8080 });
 ```
 
 ```sh
@@ -71,6 +74,8 @@ npx llm-mimic-surface serve --protocol openai --port 8080
 ```
 
 デフォルトの bind 先は `127.0.0.1` です。
+
+Agent2API のようなアプリケーションは HTTP Server を1つだけ生成し、その Server に `llmMimicSurfacePlugin` を登録します。ローカル検証用には `llm-mimic-surface/standalone` の `createStandaloneServer()` も利用できますが、これは補助APIです。
 
 ## OpenAI compatible API
 
@@ -134,10 +139,9 @@ Backend は `InvocationEvent` を yield します。Adapter が OpenAI SSE / Ant
 
 ## Security
 
-- デフォルト bind: `127.0.0.1`
-- 簡易 bearer / custom auth。ローカルでは `auth: false` を許可
-- API Key と prompt 本文はデフォルトでログに出しません
-- body size limit、timeout、CORS、切断検知
+- bind先、TLS、認証、global middleware、logging、body limit、timeout はHost Applicationが所有します
+- LLMMimicSurfaceはprotocol response/errorのserializeと、client切断からBackendの`AbortSignal`への変換を担当します
+- standalone CLIのデフォルトbind先は`127.0.0.1`です
 
 詳細は [SECURITY.md](SECURITY.md)。
 

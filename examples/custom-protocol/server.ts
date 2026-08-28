@@ -1,19 +1,16 @@
-import {
-  createEchoBackend,
-  createExternalApiServer,
-  createSimpleProtocol
-} from "../../src/index.js";
+import Fastify from "fastify";
+import { createEchoBackend, createSimpleProtocol, llmMimicSurfacePlugin } from "../../src/index.js";
 
-const server = createExternalApiServer({
+const server = Fastify();
+await server.register(llmMimicSurfacePlugin, {
   backend: createEchoBackend(),
   protocols: [
     createSimpleProtocol({
       path: "/api/generate"
     })
-  ],
-  auth: false
+  ]
 });
 
-const { host, port } = await server.listen({ host: "127.0.0.1", port: 8081 });
-console.log(`Custom protocol at http://${host}:${port}/api/generate`);
-console.log(`curl -s http://${host}:${port}/api/generate -H 'content-type: application/json' -d '{"model":"echo","prompt":"hello"}'`);
+await server.listen({ host: "127.0.0.1", port: 8081 });
+console.log("Custom protocol at http://127.0.0.1:8081/api/generate");
+console.log(`curl -s http://127.0.0.1:8081/api/generate -H 'content-type: application/json' -d '{"model":"echo","prompt":"hello"}'`);

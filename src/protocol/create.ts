@@ -45,7 +45,8 @@ export function withProtocolOptions(adapter: ProtocolAdapter, options?: Protocol
         ...extra,
         ...options,
         prefix: extra?.prefix ?? options.prefix,
-        lossyConversion: extra?.lossyConversion ?? options.lossyConversion
+        lossyConversion: extra?.lossyConversion ?? options.lossyConversion,
+        hooks: extra?.hooks ?? options.hooks
       });
     }
   };

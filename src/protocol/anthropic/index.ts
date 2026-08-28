@@ -7,6 +7,7 @@ import { contextFromProtocolRequest, joinPath } from "../types.js";
 import { encodeAnthropicError } from "./errors.js";
 import { decodeAnthropicRequest, encodeAnthropicResponse } from "./messages.js";
 import { encodeAnthropicEvent } from "./stream.js";
+import type { HttpTransportHooks } from "../../hooks.js";
 
 export function anthropicProtocol(options?: ProtocolOptions): ProtocolAdapter {
   return withProtocolOptions(
@@ -22,7 +23,7 @@ export function anthropicProtocol(options?: ProtocolOptions): ProtocolAdapter {
         path: joinPath(prefix, "/v1/messages"),
         protocolId: "anthropic",
         encodeError: encodeAnthropicError,
-        handler: messagesHandler(backend, policy)
+        handler: messagesHandler(backend, policy, options?.hooks)
       });
     }
     }),
@@ -30,7 +31,11 @@ export function anthropicProtocol(options?: ProtocolOptions): ProtocolAdapter {
   );
 }
 
-function messagesHandler(backend: ExternalApiBackend, policy: LossyConversionPolicy): ProtocolHandler {
+function messagesHandler(
+  backend: ExternalApiBackend,
+  policy: LossyConversionPolicy,
+  hooks?: HttpTransportHooks
+): ProtocolHandler {
   return async (request, reply) => {
     const decoded = decodeAnthropicRequest(request.body, {
       protocol: "anthropic",
@@ -49,7 +54,8 @@ function messagesHandler(backend: ExternalApiBackend, policy: LossyConversionPol
       encodeEvent: encodeAnthropicEvent,
       protocol: "anthropic",
       path: request.path,
-      method: request.method
+      method: request.method,
+      hooks
     });
   };
 }

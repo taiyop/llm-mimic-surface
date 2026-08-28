@@ -6,6 +6,7 @@ import type { ProtocolAdapter, ProtocolHandler, ProtocolOptions, RouteRegistrar 
 import { contextFromProtocolRequest, joinPath } from "../types.js";
 import { decodeChatCompletionsRequest, encodeChatCompletionsResponse } from "./chat-completions.js";
 import type { OpenAICompatibleDialect } from "./dialect.js";
+import type { HttpTransportHooks } from "../../hooks.js";
 import { encodeModelsList } from "./models.js";
 import { decodeResponsesRequest, encodeResponsesResponse } from "./responses.js";
 import { DONE_EVENT, encodeChatCompletionsEvent, encodeResponsesEvent } from "./stream.js";
@@ -27,14 +28,14 @@ export function createOpenAICompatibleProtocol(dialect: OpenAICompatibleDialect)
         path: joinPath(prefix, "/v1/chat/completions"),
         protocolId: dialect.id,
         encodeError: (error) => dialect.encodeError(error),
-        handler: chatHandler(backend, dialect, policy)
+        handler: chatHandler(backend, dialect, policy, options?.hooks)
       });
       registrar.route({
         method: "POST",
         path: joinPath(prefix, "/v1/responses"),
         protocolId: dialect.id,
         encodeError: (error) => dialect.encodeError(error),
-        handler: responsesHandler(backend, dialect, policy)
+        handler: responsesHandler(backend, dialect, policy, options?.hooks)
       });
       registrar.route({
         method: "GET",
@@ -50,7 +51,8 @@ export function createOpenAICompatibleProtocol(dialect: OpenAICompatibleDialect)
 function chatHandler(
   backend: ExternalApiBackend,
   dialect: OpenAICompatibleDialect,
-  policy: LossyConversionPolicy
+  policy: LossyConversionPolicy,
+  hooks?: HttpTransportHooks
 ): ProtocolHandler {
   return async (request, reply) => {
     const decoded = decodeChatCompletionsRequest(request.body, {
@@ -71,7 +73,8 @@ function chatHandler(
       trailer: [DONE_EVENT],
       protocol: dialect.id,
       path: request.path,
-      method: request.method
+      method: request.method,
+      hooks
     });
   };
 }
@@ -79,7 +82,8 @@ function chatHandler(
 function responsesHandler(
   backend: ExternalApiBackend,
   dialect: OpenAICompatibleDialect,
-  policy: LossyConversionPolicy
+  policy: LossyConversionPolicy,
+  hooks?: HttpTransportHooks
 ): ProtocolHandler {
   return async (request, reply) => {
     const decoded = decodeResponsesRequest(request.body, {
@@ -99,7 +103,8 @@ function responsesHandler(
       encodeEvent: encodeResponsesEvent,
       protocol: dialect.id,
       path: request.path,
-      method: request.method
+      method: request.method,
+      hooks
     });
   };
 }

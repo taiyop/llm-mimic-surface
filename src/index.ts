@@ -1,5 +1,5 @@
-export { createExternalApiServer, RouteCollisionError } from "./transport/http/server.js";
-export type { CreateServerOptions, ExternalApiServer } from "./transport/http/server.js";
+export { llmMimicSurfacePlugin, RouteCollisionError } from "./transport/http/plugin.js";
+export type { LLMMimicSurfacePluginOptions } from "./transport/http/plugin.js";
 
 export { openAIProtocol } from "./protocol/openai/index.js";
 export { xaiProtocol } from "./protocol/xai/index.js";
@@ -62,5 +62,4 @@ export type {
 export { serializeMessagesToPrompt } from "./util/serialize-messages.js";
 export type { SerializeMessagesOptions } from "./util/serialize-messages.js";
 
-export type { AuthConfig } from "./auth/types.js";
-export type { ServerHooks } from "./hooks.js";
+export type { HttpTransportHooks, ServerHooks } from "./hooks.js";

@@ -7,7 +7,7 @@ import type { InvocationResponse } from "../boundary/response.js";
 import { createId, unixSeconds } from "../util/id.js";
 import type { ProtocolReply, StreamEncodeState } from "./types.js";
 import { createStreamState } from "./types.js";
-import type { ServerHooks } from "../hooks.js";
+import type { HttpTransportHooks } from "../hooks.js";
 import { runHook } from "../hooks.js";
 
 export interface DispatchOptions {
@@ -23,7 +23,7 @@ export interface DispatchOptions {
     state: StreamEncodeState
   ) => EncodedStreamEvent | EncodedStreamEvent[] | null;
   trailer?: EncodedStreamEvent[];
-  hooks?: ServerHooks;
+  hooks?: HttpTransportHooks;
   protocol: string;
   path: string;
   method: string;
