@@ -1,0 +1,10 @@
+{
+  "model": "grok-4.6",
+  "messages": [
+    { "role": "system", "content": "You are Grok." },
+    { "role": "user", "content": "hi" }
+  ],
+  "temperature": 0,
+  "search_parameters": { "mode": "auto" },
+  "deferred": false
+}

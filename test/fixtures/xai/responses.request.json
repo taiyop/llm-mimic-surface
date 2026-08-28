@@ -1,0 +1,11 @@
+{
+  "model": "grok-4.6",
+  "input": "What are the latest updates from xAI?",
+  "store": false,
+  "include": ["web_search_call_output"],
+  "tools": [
+    { "type": "web_search" },
+    { "type": "x_search" },
+    { "type": "code_interpreter" }
+  ]
+}
